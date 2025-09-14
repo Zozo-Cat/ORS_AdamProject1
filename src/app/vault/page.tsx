@@ -15,11 +15,10 @@ type Metrics = {
     dexId: string | null;
 } | null;
 
-function formatUSD(n: number | null, opts?: Intl.NumberFormatOptions) {
+function formatUSD(n: number | null | undefined, opts?: Intl.NumberFormatOptions) {
     if (n == null || Number.isNaN(n)) return "—";
     const abs = Math.abs(n);
-    const maximumFractionDigits =
-        abs >= 1 ? 2 : abs >= 0.01 ? 4 : 6; // mere præcision for små priser
+    const maximumFractionDigits = abs >= 1 ? 2 : abs >= 0.01 ? 4 : 6; // more precision for small prices
     return new Intl.NumberFormat("en-US", {
         style: "currency",
         currency: "USD",
@@ -28,7 +27,7 @@ function formatUSD(n: number | null, opts?: Intl.NumberFormatOptions) {
     }).format(n);
 }
 
-function formatPct(n: number | null) {
+function formatPct(n: number | null | undefined) {
     if (n == null || Number.isNaN(n)) return "—";
     const sign = n > 0 ? "+" : "";
     return `${sign}${n.toFixed(2)}%`;
@@ -49,13 +48,13 @@ export default function VaultPage() {
                     setData(json);
                     setLoading(false);
                 }
-            } catch (e) {
+            } catch {
                 if (!cancelled) setLoading(false);
             }
         };
 
         load();
-        const id = setInterval(load, 20_000); // opdatér hvert 20. sekund
+        const id = setInterval(load, 20_000); // refresh every 20s
         return () => {
             cancelled = true;
             clearInterval(id);
@@ -64,7 +63,7 @@ export default function VaultPage() {
 
     const m = data?.metrics ?? null;
 
-    // Placeholder “bank” items (kan erstattes med rigtige sprites senere)
+    // Placeholder “bank” items (replace with real sprites later)
     const items = Array.from({ length: 28 }).map((_, i) => ({
         id: i + 1,
         color: ["#ffd36b", "#9ad17b", "#7bd3ff", "#ff9bd3"][i % 4],
@@ -87,11 +86,13 @@ export default function VaultPage() {
                     <MetricCard label="Price" value={loading ? "…" : formatUSD(m?.priceUsd)} />
                     <MetricCard label="24h Vol" value={loading ? "…" : formatUSD(m?.vol24)} />
                     <MetricCard label="Liquidity" value={loading ? "…" : formatUSD(m?.liquidityUsd)} />
-                    <MetricCard label="FDV / MC" value={loading ? "…" : formatUSD(m?.mcapUsd ?? m?.fdvUsd)} />
+                    <MetricCard label="FDV / MC" value={loading ? "…" : formatUSD((m?.mcapUsd ?? m?.fdvUsd) ?? null)} />
                     <MetricCard
                         label="Change 24h"
                         value={
-                            loading ? "…" : (
+                            loading ? (
+                                "…"
+                            ) : (
                                 <span className={m?.ch24 != null && m.ch24 >= 0 ? "text-emerald-400" : "text-red-400"}>
                   {formatPct(m?.ch24)}
                 </span>
@@ -104,7 +105,8 @@ export default function VaultPage() {
                 <section className="rounded-lg border border-[#2b2520] bg-[#14100e]/70 p-3 text-sm">
                     {!data?.configured ? (
                         <div className="opacity-80">
-                            <b>Token not configured.</b> Sæt <code>NEXT_PUBLIC_TOKEN_CA</code> i <code>.env.local</code> for at aktivere live metrics.
+                            <b>Token not configured.</b> Set <code>NEXT_PUBLIC_TOKEN_CA</code> in <code>.env.local</code> to enable live
+                            metrics.
                         </div>
                     ) : m ? (
                         <div className="flex flex-wrap items-center gap-3">
@@ -122,7 +124,7 @@ export default function VaultPage() {
                             {m.dexId && <span className="opacity-60">({m.dexId})</span>}
                         </div>
                     ) : (
-                        <div className="opacity-80">Ingen Solana-par fundet for den angivne token endnu.</div>
+                        <div className="opacity-80">No Solana pair found for the configured token yet.</div>
                     )}
                 </section>
 
