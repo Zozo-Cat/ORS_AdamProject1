@@ -81,11 +81,12 @@ export default function LandingPage() {
                 <div className="absolute left-1/2 bottom-[10vh] md:bottom-[9vh] -translate-x-1/2 w-full px-4 z-10">
                     <div className="mx-auto max-w-6xl">
                         <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                            <Metric label="Price" />
-                            <Metric label="24h Vol" />
-                            <Metric label="Liquidity" />
-                            <Metric label="FDV / MC" />
-                            <Metric label="Change 24h" />
+                            {/* CHANGED LABELS ONLY */}
+                            <Metric label="Vault value" />
+                            <Metric label="Streamer donations" />
+                            <Metric label="Market cap" />
+                            <Metric label="24h volume" />
+                            <Metric label="Items acquired" />
                         </div>
                     </div>
                 </div>
@@ -100,13 +101,10 @@ export default function LandingPage() {
                     <p className="mt-4 text-[15px] leading-relaxed text-[#d6d0c5]/90 max-w-3xl mx-auto">
                         OSRS Vault is a community-driven “bank”. When people trade
                         <span className="mx-1 font-semibold">$OSRS</span>, a small share of fees flows
-                        into a shared treasury. We use those funds to buy desirable Old School
-                        RuneScape items — then drop them back to the community via the Vault.
-                        Transparent. Fun. No nonsense.
+                        into a shared treasury. We use those funds to buy desirable Old School RuneScape items, donate to streamers & host massive drop parties.
                     </p>
                     <p className="mt-3 text-[12px] text-[#b7aa8b]/80">
-                        OSRS Vault is not affiliated with Jagex. In-game items have no real-world
-                        value; this is a community project for fans of the game.
+                        Items will be swept, price will increase. ALL EYES ON US.
                     </p>
                 </div>
             </section>
@@ -135,10 +133,11 @@ export default function LandingPage() {
                         iconWebp="/icons/bow-sway.webp"
                         iconPng="/icons/bow-sway.png"
                     />
+                    {/* CHANGED: Step 4 copy only */}
                     <StepCard
                         step="Step 4"
-                        title="Drops To Community"
-                        text="Items are dropped back to the community."
+                        title="Supply shock"
+                        text="Vault value goes up"
                         iconWebp="/icons/scythe-sway.webp"
                         iconPng="/icons/scythe-sway.png"
                     />
@@ -149,20 +148,33 @@ export default function LandingPage() {
             <section className="relative bg-[#0b0b0b] py-10 pb-20">
                 <div className="max-w-6xl mx-auto px-4">
                     <h3 className="text-center text-[20px] tracking-widest text-[#f4f1e8]">
-                        The Drop Table
+                        Items we will aquire
                     </h3>
                     <p className="mt-3 text-center text-[13px] text-[#d6d0c5]/90 max-w-3xl mx-auto">
-                        We rotate a curated list of items. Some are rare, some are common — all are fun.
-                        Odds and pool are shown clearly before each drop.
+                        We systematically sweep the market, buying every Mega-rare item we can find. As circulating supply shrink, a price shock is inevitable — sending these valuable items to new all-time highs.
+                        <span className="block mt-2">
+    The items we sweep off the markets are extremely valuable and they are necessary to complete end game content efficiently.
+  </span>
                     </p>
 
-                    <div className="mt-6 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-                        <DropItemCard name="Twisted Bow" rarity="Ultra rare" srcWebp="/drops/tbow.webp" srcPng="/drops/tbow.png" />
-                        <DropItemCard name="Scythe" rarity="Very rare" srcPng="/drops/scythe.png" />
-                        <DropItemCard name="Staff" rarity="Rare" srcPng="/drops/staff.png" />
-                        <DropItemCard name="Dragon Pickaxe" rarity="Uncommon" srcPng="/drops/dpick.png" />
-                        <DropItemCard name="GP Stack" rarity="Common" srcPng="/drops/gp.png" />
-                        <DropItemCard name="Mystery Stones" rarity="Wildcard" srcPng="/drops/stones.png" />
+                    {/* CHANGED: only the 3 requested items */}
+                    <div className="mt-8 grid grid-cols-1 md:grid-cols-3 lg:grid-cols-3 gap-8">
+                        <DropItemCard
+                            name="Twisted Bow"
+                            rarity="Ultra rare"
+                            srcWebp="/drops/tbow.webp"
+                            srcPng="/drops/tbow.png"
+                        />
+                        <DropItemCard
+                            name="Scythe of Vitur"
+                            rarity="Very rare"
+                            srcPng="/drops/scythe.png"
+                        />
+                        <DropItemCard
+                            name="Tumeken's Shadow"
+                            rarity="Very rare"
+                            srcPng="/drops/staff.png"
+                        />
                     </div>
                 </div>
             </section>
@@ -398,7 +410,7 @@ function DropItemCard({
 }) {
     return (
         <div
-            className="rounded-2xl p-4 border border-black/40 text-center shadow-[0_4px_24px_rgba(0,0,0,0.35)]"
+            className="rounded-2xl p-10 border border-black/40 text-center shadow-[0_4px_24px_rgba(0,0,0,0.35)]"
             style={{
                 backgroundImage: "url('/stone-panel-blank.png')",
                 backgroundRepeat: "no-repeat",
