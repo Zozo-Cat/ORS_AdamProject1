@@ -1,201 +1,165 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import BankPanel, {
+    formatOsrsNumber,
+    formatWithDots,
+    type BankItem,
+} from "@/components/BankPanel";
 
-type Metrics = {
-    priceUsd: number | null;
-    liquidityUsd: number | null;
-    fdvUsd: number | null;
-    mcapUsd: number | null;
-    vol24: number | null;
-    ch24: number | null;
-    ch5m: number | null;
-    pairUrl: string | null;
-    dexId: string | null;
-} | null;
+/* ---------- Config (safe to leave as-is) ---------- */
+const CAPACITY = 2_000;
 
-function formatUSD(n: number | null | undefined, opts?: Intl.NumberFormatOptions) {
-    if (n == null || Number.isNaN(n)) return "—";
-    const abs = Math.abs(n);
-    const maximumFractionDigits = abs >= 1 ? 2 : abs >= 0.01 ? 4 : 6; // more precision for small prices
-    return new Intl.NumberFormat("en-US", {
-        style: "currency",
-        currency: "USD",
-        maximumFractionDigits,
-        ...opts,
-    }).format(n);
+// Social/CTA links (override with env if you have them)
+const X_URL =
+    process.env.NEXT_PUBLIC_X_URL ||
+    "https://x.com/"; // e.g. https://x.com/yourhandle
+const TG_URL =
+    process.env.NEXT_PUBLIC_TELEGRAM_URL ||
+    "https://t.me/"; // e.g. https://t.me/yourgroup
+const BUY_URL =
+    process.env.NEXT_PUBLIC_BUY_URL || "/#buy"; // point to your DEX/purchase link
+
+/* ---------- Placeholder vault items (icons in /public/drops) ---------- */
+const ITEMS: BankItem[] = [
+    { id: "gp-1", icon: "/drops/gp.png", qty: 125_000_000 },
+    { id: "tbow-1", icon: "/drops/tbow.png", qty: 1 },
+    { id: "scythe-1", icon: "/drops/scythe.png", qty: 1 },
+    { id: "stones-1", icon: "/drops/stones.png", qty: 142 },
+    { id: "tbow-2", icon: "/drops/tbow.png", qty: 11 },
+    { id: "stones-2", icon: "/drops/stones.png", qty: 48 },
+    { id: "gp-2", icon: "/drops/gp.png", qty: 27_420 },
+];
+
+/* ---------- Small helpers for the metric row ---------- */
+function totalGp(items: BankItem[]) {
+    return items
+        .filter((it) => it.icon.includes("gp.png"))
+        .reduce((sum, it) => sum + (it.qty || 0), 0);
 }
 
-function formatPct(n: number | null | undefined) {
-    if (n == null || Number.isNaN(n)) return "—";
-    const sign = n > 0 ? "+" : "";
-    return `${sign}${n.toFixed(2)}%`;
+function totalQty(items: BankItem[]) {
+    return items.reduce((sum, it) => sum + (it.qty || 0), 0);
 }
 
 export default function VaultPage() {
-    const [data, setData] = useState<{ ok: boolean; configured: boolean; metrics: Metrics } | null>(null);
-    const [loading, setLoading] = useState(true);
-
-    useEffect(() => {
-        let cancelled = false;
-
-        const load = async () => {
-            try {
-                const res = await fetch("/api/metrics", { cache: "no-store" });
-                const json = await res.json();
-                if (!cancelled) {
-                    setData(json);
-                    setLoading(false);
-                }
-            } catch {
-                if (!cancelled) setLoading(false);
-            }
-        };
-
-        load();
-        const id = setInterval(load, 20_000); // refresh every 20s
-        return () => {
-            cancelled = true;
-            clearInterval(id);
-        };
-    }, []);
-
-    const m = data?.metrics ?? null;
-
-    // Placeholder “bank” items (replace with real sprites later)
-    const items = Array.from({ length: 28 }).map((_, i) => ({
-        id: i + 1,
-        color: ["#ffd36b", "#9ad17b", "#7bd3ff", "#ff9bd3"][i % 4],
-    }));
+    // Fake stats (replace with backend when ready)
+    const itemsBought = totalQty(ITEMS);
+    const boughtValue = totalGp(ITEMS);
+    const itemsDropped: number | null = null;
+    const droppedValue: number | null = null;
 
     return (
         <div className="min-h-screen bg-[#0e0c0a] text-white">
+            {/* Top bar with Back */}
             <header className="border-b border-[#2b2520] bg-[#0f0c0a]/90">
-                <div className="mx-auto max-w-6xl px-4 py-3 flex items-center justify-between">
-                    <h1 className="text-[#F8E7A1] drop-shadow-[0_2px_0_#000]">OSRS Vault</h1>
-                    <Link href="/" className="text-xs underline opacity-80 hover:opacity-100">
-                        Back
+                <div className="mx-auto max-w-6xl px-4 py-3 flex items-center gap-3">
+                    <Link
+                        href="/"
+                        className="rounded-md border border-[#3a2f25] bg-[#1b1a1a] px-3 py-1.5 text-sm text-[#f1e7c6] shadow-[0_0_0_1px_#000_inset] hover:bg-[#2b1f1a] transition-colors"
+                        style={{ textShadow: "0 1px 0 #000" }}
+                    >
+                        ← Back
                     </Link>
+                    <div className="flex-1" />
                 </div>
             </header>
 
             <main className="mx-auto max-w-6xl px-4 py-6 grid gap-6">
-                {/* Metrics */}
-                <section className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                    <MetricCard label="Price" value={loading ? "…" : formatUSD(m?.priceUsd)} />
-                    <MetricCard label="24h Vol" value={loading ? "…" : formatUSD(m?.vol24)} />
-                    <MetricCard label="Liquidity" value={loading ? "…" : formatUSD(m?.liquidityUsd)} />
-                    <MetricCard label="FDV / MC" value={loading ? "…" : formatUSD((m?.mcapUsd ?? m?.fdvUsd) ?? null)} />
+                {/* Metric row */}
+                <section className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                    <MetricCard label="Items Bought" value={formatWithDots(itemsBought)} />
                     <MetricCard
-                        label="Change 24h"
+                        label="Bought Value"
+                        value={formatOsrsNumber(boughtValue, { abbrFrom: 100_000 })}
+                    />
+                    <MetricCard
+                        label="Items Dropped"
+                        value={itemsDropped == null ? "—" : formatWithDots(itemsDropped)}
+                    />
+                    <MetricCard
+                        label="Dropped Value"
                         value={
-                            loading ? (
-                                "…"
-                            ) : (
-                                <span className={m?.ch24 != null && m.ch24 >= 0 ? "text-emerald-400" : "text-red-400"}>
-                  {formatPct(m?.ch24)}
-                </span>
-                            )
+                            droppedValue == null
+                                ? "—"
+                                : formatOsrsNumber(droppedValue, { abbrFrom: 100_000 })
                         }
                     />
                 </section>
 
-                {/* Dex link / status */}
-                <section className="rounded-lg border border-[#2b2520] bg-[#14100e]/70 p-3 text-sm">
-                    {!data?.configured ? (
-                        <div className="opacity-80">
-                            <b>Token not configured.</b> Set <code>NEXT_PUBLIC_TOKEN_CA</code> in <code>.env.local</code> to enable live
-                            metrics.
-                        </div>
-                    ) : m ? (
-                        <div className="flex flex-wrap items-center gap-3">
-                            <span className="opacity-80">Data via Dexscreener</span>
-                            {m.pairUrl && (
-                                <a
-                                    href={m.pairUrl}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="underline decoration-dotted hover:opacity-100 opacity-80"
-                                >
-                                    View pair
-                                </a>
-                            )}
-                            {m.dexId && <span className="opacity-60">({m.dexId})</span>}
-                        </div>
-                    ) : (
-                        <div className="opacity-80">No Solana pair found for the configured token yet.</div>
-                    )}
-                </section>
+                {/* Vault panel (unchanged) */}
+                <BankPanel title={`OSRS Vault`} capacity={CAPACITY} items={ITEMS} />
 
-                {/* Bank panel */}
-                <section className="rounded-xl border border-[#2b2520] bg-[#191513]/80 shadow-[0_0_0_1px_#000_inset]">
-                    <div className="flex items-center justify-between rounded-t-xl border-b border-[#2b2520] bg-[#0f0c0a]/80 px-4 py-2">
-                        <div className="text-[#F8E7A1]">OSRS Vault</div>
-                        <div className="text-xs opacity-70">?</div>
+                {/* Social + CTA bar */}
+                <section className="mt-2 flex items-center justify-between gap-4 rounded-lg border border-[#2b2520] bg-[#0f0c0a]/90 px-4 py-3 shadow-[0_0_0_1px_#000_inset]">
+                    <div className="flex items-center gap-3">
+                        <SocialIcon href={X_URL} src="/social/x.svg" alt="X" />
+                        <SocialIcon href={TG_URL} src="/social/telegram.svg" alt="Telegram" />
                     </div>
 
-                    <div className="grid grid-cols-[56px_1fr] gap-0">
-                        {/* Sidebar tabs */}
-                        <aside className="border-r border-[#2b2520] bg-[#15110f]/70 p-2 space-y-2">
-                            {Array.from({ length: 6 }).map((_, i) => (
-                                <div key={i} className="h-10 w-10 rounded bg-[#2a221a] border border-[#3a2f25] mx-auto" />
-                            ))}
-                        </aside>
-
-                        {/* Items grid */}
-                        <div className="p-3">
-                            <div className="grid grid-cols-7 sm:grid-cols-8 md:grid-cols-9 lg:grid-cols-10 gap-2">
-                                {items.map((it) => (
-                                    <div
-                                        key={it.id}
-                                        className="aspect-square rounded border border-[#3a2f25] bg-[#0e0b09] flex items-center justify-center"
-                                    >
-                                        <div className="h-7 w-7 rounded-sm" style={{ background: it.color }} />
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Bottom controls */}
-                    <div className="rounded-b-xl border-t border-[#2b2520] bg-[#0f0c0a]/80 px-3 py-2 text-[11px] text-[#f1e7c6]">
-                        <div className="flex items-center gap-4 flex-wrap">
-                            <div className="flex items-center gap-2">
-                                <span className="px-2 py-1 rounded bg-[#2b1f1a] border border-[#3a2f25]">Swap</span>
-                                <span className="px-2 py-1 rounded bg-[#1b1a1a] border border-[#3a2f25] opacity-70">Insert</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <span className="px-2 py-1 rounded bg-[#2b1f1a] border border-[#3a2f25]">Item</span>
-                                <span className="px-2 py-1 rounded bg-[#1b1a1a] border border-[#3a2f25] opacity-70">Note</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <span>Quantity:</span>
-                                {["1", "5", "10", "X", "All"].map((q) => (
-                                    <span
-                                        key={q}
-                                        className={`px-2 py-1 rounded border border-[#3a2f25] ${
-                                            q === "All" ? "bg-[#2b1f1a]" : "bg-[#1b1a1a] opacity-80"
-                                        }`}
-                                    >
-                    {q}
-                  </span>
-                                ))}
-                            </div>
-                            <div className="ml-auto opacity-70">🔒</div>
-                        </div>
-                    </div>
+                    <a
+                        href={BUY_URL}
+                        target={BUY_URL.startsWith("http") ? "_blank" : undefined}
+                        rel={BUY_URL.startsWith("http") ? "noreferrer" : undefined}
+                        className="rounded-md border border-[#3a2f25] bg-[#2b1f1a] px-4 py-2 text-[#F8E7A1] shadow-[0_0_0_1px_#000_inset] hover:bg-[#3a2a20] transition-colors"
+                        style={{ textShadow: "0 1px 0 #000", letterSpacing: "0.5px" }}
+                    >
+                        Buy $OSRS
+                    </a>
                 </section>
             </main>
         </div>
     );
 }
 
-function MetricCard({ label, value }: { label: string; value: React.ReactNode }) {
+/* ----- little metric tile ----- */
+function MetricCard({
+                        label,
+                        value,
+                    }: {
+    label: string;
+    value: React.ReactNode;
+}) {
     return (
-        <div className="rounded-lg border border-[#2b2520] bg-[#14100e]/70 p-3 text-center">
-            <div className="text-[10px] uppercase tracking-wider opacity-70">{label}</div>
-            <div className="mt-1 text-sm text-[#f1e7c6]">{value}</div>
+        <div className="rounded-lg border border-[#2b2520] bg-[#14100e]/80 p-3 text-center shadow-[0_0_0_1px_#000_inset]">
+            <div
+                className="text-[11px] uppercase tracking-widest opacity-80"
+                style={{ textShadow: "0 1px 0 #000", letterSpacing: "1px" }}
+            >
+                {label}
+            </div>
+            <div
+                className="mt-1 text-lg text-[#F8E7A1]"
+                style={{ textShadow: "0 2px 0 #000" }}
+            >
+                {value}
+            </div>
         </div>
+    );
+}
+
+/* ----- social icon pill ----- */
+function SocialIcon({
+                        href,
+                        src,
+                        alt,
+                    }: {
+    href: string;
+    src: string;
+    alt: string;
+}) {
+    const external = href.startsWith("http");
+    return (
+        <a
+            href={href}
+            target={external ? "_blank" : undefined}
+            rel={external ? "noreferrer" : undefined}
+            className="h-9 w-9 grid place-items-center rounded-full border border-[#2b2520] bg-white/5 hover:bg-white/10 transition-colors shadow-[0_0_0_1px_#000_inset]"
+            aria-label={alt}
+            title={alt}
+        >
+            {/* svgs are white; no styling so they stay crisp */}
+            <img src={src} alt={alt} className="h-5 w-5" />
+        </a>
     );
 }
