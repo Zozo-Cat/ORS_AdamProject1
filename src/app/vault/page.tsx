@@ -66,27 +66,6 @@ export default function VaultPage() {
             </header>
 
             <main className="mx-auto max-w-6xl px-4 py-6 grid gap-6">
-                {/* Metric row */}
-                <section className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                    <MetricCard label="Items Bought" value={formatWithDots(itemsBought)} />
-                    <MetricCard
-                        label="Bought Value"
-                        value={formatOsrsNumber(boughtValue, { abbrFrom: 100_000 })}
-                    />
-                    <MetricCard
-                        label="Items Dropped"
-                        value={itemsDropped == null ? "—" : formatWithDots(itemsDropped)}
-                    />
-                    <MetricCard
-                        label="Dropped Value"
-                        value={
-                            droppedValue == null
-                                ? "—"
-                                : formatOsrsNumber(droppedValue, { abbrFrom: 100_000 })
-                        }
-                    />
-                </section>
-
                 {/* Vault panel (unchanged) */}
                 <BankPanel title={`OSRS Vault`} capacity={CAPACITY} items={ITEMS} />
 
