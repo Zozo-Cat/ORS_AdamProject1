@@ -1,6 +1,5 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
 import { DEFAULT_STATE, normalize, type VaultState } from "@/lib/vault";
 
 /* ---------- types & defaults ---------- */
