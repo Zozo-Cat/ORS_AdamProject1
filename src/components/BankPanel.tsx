@@ -28,11 +28,11 @@ const tileClass =
 /* ---------------- component ---------------- */
 export default function BankPanel({
                                       title,
-                                      capacity,
+                                      capacity, // optional & ignored (kept for compatibility)
                                       items,
                                   }: {
     title: string;
-    capacity: number;
+    capacity?: number;
     items: BankItem[];
 }) {
     const scrollRef = useRef<HTMLDivElement>(null);
@@ -58,18 +58,18 @@ export default function BankPanel({
         <section className="rounded-2xl border border-[#2b2520] bg-[#120f0c] shadow-[0_0_0_1px_#000_inset]">
             {/* Topbar */}
             <div className="relative border-b border-[#2b2520] bg-[#1a1411]/85 px-5 py-3">
-                {/* left cluster (∞ +) — now same size as sidebar tiles */}
+                {/* left cluster (∞ +) — same size as sidebar tiles */}
                 <div className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
                     <ImgBtn src="/ui/icons/tab-all.png" alt="All" size={52} imgH={28} />
                     <ImgBtn src="/ui/icons/tab-add.png" alt="Add" size={52} imgH={28} />
                 </div>
 
-                {/* centered title */}
+                {/* centered title (capacity removed) */}
                 <h2
                     className="text-center text-[#F8E7A1]"
                     style={{ fontSize: "32px", letterSpacing: "1px", textShadow: "0 2px 0 #000" }}
                 >
-                    {title} <span className="opacity-90">({formatWithDots(capacity)})</span>
+                    {title}
                 </h2>
 
                 {/* right cluster (help/lock) */}
@@ -137,9 +137,7 @@ export default function BankPanel({
                 <Divider />
 
                 <Label>Quantity:</Label>
-                <Pill small active>
-                    1
-                </Pill>
+                <Pill small active>1</Pill>
                 <Pill small>5</Pill>
                 <Pill small>10</Pill>
                 <Pill small>X</Pill>
