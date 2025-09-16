@@ -59,17 +59,17 @@ export async function GET() {
             return NextResponse.json({ error: rowsErr.message }, { status: 500 });
         }
 
-        // Sum pr item
-        const sums = new Map<number, bigint>();
+        // Sum pr. item (brug number, ikke BigInt)
+        const sums = new Map<number, number>();
         for (const r of (rows ?? []) as any[]) {
-            const cur = sums.get(r.item_id) ?? 0n;
-            sums.set(r.item_id, cur + BigInt(r.qty));
+            const cur = sums.get(r.item_id) ?? 0;
+            sums.set(r.item_id, cur + Number(r.qty ?? 0));
         }
 
-        // Map kun til de tre vi viser i admin/vault state
-        const tbow = Number(sums.get(ITEM_IDS.tbow) ?? 0n);
-        const scythe = Number(sums.get(ITEM_IDS.scytheUncharged) ?? 0n);
-        const staff = Number(sums.get(ITEM_IDS.shadowUncharged) ?? 0n);
+// Map kun til de tre vi viser i admin/vault state
+        const tbow   = sums.get(ITEM_IDS.tbow) ?? 0;
+        const scythe = sums.get(ITEM_IDS.scytheUncharged) ?? 0;
+        const staff  = sums.get(ITEM_IDS.shadowUncharged) ?? 0;
 
         // "Sidst opdateret" = nyeste created_at blandt de snapshots vi bruger
         const updatedAt =
