@@ -1,16 +1,31 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import BankPanel, { type BankItem } from "@/components/BankPanel";
 
-const X_URL = process.env.NEXT_PUBLIC_X_URL || "https://x.com/";
+const X_URL  = process.env.NEXT_PUBLIC_X_URL  || "https://x.com/";
 const TG_URL = process.env.NEXT_PUBLIC_TELEGRAM_URL || "https://t.me/";
 const BUY_URL = process.env.NEXT_PUBLIC_BUY_URL || "/#buy";
+const DEX_URL = process.env.NEXT_PUBLIC_DEXSCREENER_URL || "https://dexscreener.com/";
 
 type AdminItems = { tbow?: number; scythe?: number; staff?: number };
 type AdminState = { items: AdminItems; updatedAt?: string | null };
 const ICONS = { tbow: "/drops/tbow.png", scythe: "/drops/scythe.png", staff: "/drops/staff.png" } as const;
+
+type PricesPayload = {
+    generatedAt: string;
+    source: "osrs-wiki";
+    items: Array<{ id: number; name: string; qty: number; priceGp: number; subtotalGp: number }>;
+    totalGp: number;
+};
+
+// item-ids vi bruger i /api/prices
+const ITEM_IDS = {
+    tbow: 20997,
+    scythe: 22486, // uncharged
+    staff: 27277,  // shadow uncharged
+};
 
 // tiny formatter to keep title short (k, m, b)
 function fmtGpShort(n: number | null | undefined): string {
@@ -24,8 +39,11 @@ function fmtGpShort(n: number | null | undefined): string {
 
 export default function VaultPage() {
     const [state, setState] = useState<AdminState | null>(null);
-    const [vaultValue, setVaultValue] = useState<number | null>(null);
 
+    // map af itemId -> priceGp (fra /api/prices)
+    const [priceMap, setPriceMap] = useState<Record<number, number>>({});
+
+    // hent state + priser og hold dem friske
     useEffect(() => {
         let alive = true;
 
@@ -44,10 +62,13 @@ export default function VaultPage() {
             try {
                 const res = await fetch(`/api/prices?r=${Date.now()}`, { cache: "no-store" });
                 if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                const json = await res.json();
-                if (alive) setVaultValue(Number(json?.totalGp) || 0);
+                const json = (await res.json()) as PricesPayload;
+                if (!alive) return;
+                const m: Record<number, number> = {};
+                for (const it of json.items || []) m[it.id] = Number(it.priceGp) || 0;
+                setPriceMap(m);
             } catch {
-                if (alive) setVaultValue(0);
+                if (alive) setPriceMap({});
             }
         };
 
@@ -58,13 +79,11 @@ export default function VaultPage() {
 
         refreshAll();
 
-        // Poll faster (10s)
+        // Poll (10s)
         const id = setInterval(refreshAll, 10_000);
 
-        // Refresh when tab becomes active again
-        const onVis = () => {
-            if (!document.hidden) refreshAll();
-        };
+        // Refresh when tab becomes active
+        const onVis = () => { if (!document.hidden) refreshAll(); };
         document.addEventListener("visibilitychange", onVis);
 
         return () => {
@@ -74,14 +93,21 @@ export default function VaultPage() {
         };
     }, []);
 
-    // Build items from counts
+    // Build items for panelet fra state
     const items: BankItem[] = [];
     const counts = state?.items || {};
     if ((counts.tbow ?? 0) > 0) items.push({ id: "tbow", icon: ICONS.tbow, qty: counts.tbow! });
     if ((counts.scythe ?? 0) > 0) items.push({ id: "scythe", icon: ICONS.scythe, qty: counts.scythe! });
     if ((counts.staff ?? 0) > 0) items.push({ id: "staff", icon: ICONS.staff, qty: counts.staff! });
 
-    // Title shows value (no layout change)
+    // Beregn titelværdi = (counts i UI) * (seneste wiki-pris)
+    const vaultValue = useMemo(() => {
+        const tbowVal   = (counts.tbow   || 0) * (priceMap[ITEM_IDS.tbow]   || 0);
+        const scytheVal = (counts.scythe || 0) * (priceMap[ITEM_IDS.scythe] || 0);
+        const staffVal  = (counts.staff  || 0) * (priceMap[ITEM_IDS.staff]  || 0);
+        return tbowVal + scytheVal + staffVal;
+    }, [counts.tbow, counts.scythe, counts.staff, priceMap]);
+
     const title = `OSRS Vault${vaultValue != null ? ` (${fmtGpShort(vaultValue)} GP)` : ""}`;
 
     return (
@@ -100,12 +126,30 @@ export default function VaultPage() {
             </header>
 
             <main className="mx-auto max-w-6xl px-4 py-6 grid gap-6">
-                <BankPanel title={title} items={items} />
+                {/* Bank-panel + usynligt H-hotspot i øverste højre hjørne */}
+                <div className="relative">
+                    <BankPanel title={title} items={items} />
+                    <Link
+                        href="/admin?from=vault"
+                        aria-label="admin"
+                        title=""
+                        className="
+              absolute top-2 right-2
+              h-7 w-7
+              opacity-0 hover:opacity-20 focus:opacity-20
+              rounded
+              outline-none
+            "
+                    />
+                </div>
 
+                {/* SoMe + CTA */}
                 <section className="mt-2 flex items-center justify-between gap-4 rounded-lg border border-[#2b2520] bg-[#0f0c0a]/90 px-4 py-3 shadow-[0_0_0_1px_#000_inset]">
                     <div className="flex items-center gap-3">
-                        <SocialIcon href={X_URL} src="/social/x.svg" alt="X" />
+                        <SocialIcon href={X_URL}  src="/social/x.svg" alt="X" />
                         <SocialIcon href={TG_URL} src="/social/telegram.svg" alt="Telegram" />
+                        {/* Dexscreener (sort ikon) */}
+                        <SocialIcon href={DEX_URL} src="/social/dexscreener.svg" alt="Dexscreener" />
                     </div>
                     <a
                         href={BUY_URL}

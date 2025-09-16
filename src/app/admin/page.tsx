@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import BackToVaultButton from "@/components/BackToVaultButton";
 
 /* ---------- types & defaults ---------- */
 type VaultState = {
@@ -91,8 +92,7 @@ export default function AdminPage() {
                 const t = await res.text().catch(() => "");
                 setMsg(`Save failed (HTTP ${res.status}) ${t ? "- " + t : ""}`);
             } else {
-                const json = await res.json().catch(() => null);
-                if (json) setState(normalize(json));
+                // Behold lokal state; server svarer kun { ok: true, snapshotId }
                 setMsg("Saved ✓");
             }
         } catch (e) {
@@ -102,10 +102,39 @@ export default function AdminPage() {
         }
     }
 
-    // ---- Login view (meget simpelt) ----
+    async function resetItemsAcquired() {
+        if (!token.trim()) {
+            setMsg("Enter access code first.");
+            return;
+        }
+        const ok = window.confirm("Reset Items Acquired counter to 0?");
+        if (!ok) return;
+        setMsg(null);
+        try {
+            const res = await fetch("/api/metrics/reset", {
+                method: "POST",
+                headers: { "x-admin-token": token },
+            });
+            if (!res.ok) {
+                const t = await res.text().catch(() => "");
+                setMsg(`Reset failed (HTTP ${res.status}) ${t ? "- " + t : ""}`);
+            } else {
+                setMsg("Items Acquired reset ✓");
+            }
+        } catch {
+            setMsg("Reset failed.");
+        }
+    }
+
+    // ---- Login view ----
     if (!authed) {
         return (
             <div className="min-h-screen bg-[#0e0c0a] text-white grid place-items-center px-4">
+                {/* Tilbage-knap øverst til venstre */}
+                <div className="fixed top-4 left-4 z-50">
+                    <BackToVaultButton />
+                </div>
+
                 <div className="w-full max-w-sm rounded-lg border border-[#2b2520] bg-[#14100e]/90 p-4 shadow-[0_0_0_1px_#000_inset]">
                     <h1 className="text-lg mb-3" style={{ textShadow: "0 1px 0 #000" }}>
                         Admin Login
@@ -126,7 +155,7 @@ export default function AdminPage() {
                     </button>
                     {msg && <p className="mt-2 text-sm opacity-80">{msg}</p>}
                     <p className="mt-3 text-xs opacity-60">
-                        The code will be controlled before acces is granted.
+                        The code will be controlled before access is granted.
                     </p>
                 </div>
             </div>
@@ -137,6 +166,9 @@ export default function AdminPage() {
     return (
         <div className="min-h-screen bg-[#0e0c0a] text-white px-4 py-6">
             <div className="mx-auto max-w-2xl space-y-4">
+                {/* Tilbage-knap øverst */}
+                <BackToVaultButton />
+
                 <h1 className="text-xl" style={{ textShadow: "0 1px 0 #000" }}>
                     Admin – OSRS Vault Items
                 </h1>
@@ -146,23 +178,17 @@ export default function AdminPage() {
                         <ItemField
                             label="Twisted Bow"
                             value={state.items.tbow}
-                            onChange={(v) =>
-                                setState((s) => ({ ...s, items: { ...s.items, tbow: v } }))
-                            }
+                            onChange={(v) => setState((s) => ({ ...s, items: { ...s.items, tbow: v } }))}
                         />
                         <ItemField
                             label="Scythe of Vitur"
                             value={state.items.scythe}
-                            onChange={(v) =>
-                                setState((s) => ({ ...s, items: { ...s.items, scythe: v } }))
-                            }
+                            onChange={(v) => setState((s) => ({ ...s, items: { ...s.items, scythe: v } }))}
                         />
                         <ItemField
                             label="Tumeken's Shadow"
                             value={state.items.staff}
-                            onChange={(v) =>
-                                setState((s) => ({ ...s, items: { ...s.items, staff: v } }))
-                            }
+                            onChange={(v) => setState((s) => ({ ...s, items: { ...s.items, staff: v } }))}
                         />
                     </div>
 
@@ -175,6 +201,15 @@ export default function AdminPage() {
                         >
                             {saving ? "Saving…" : "Save"}
                         </button>
+
+                        <button
+                            onClick={resetItemsAcquired}
+                            className="rounded-md border border-[#3a2f25] bg-[#1e1410] px-4 py-2 text-[#F8E7A1] hover:bg-[#2b1b14] transition-colors"
+                            style={{ textShadow: "0 1px 0 #000" }}
+                        >
+                            Reset Items Acquired
+                        </button>
+
                         <span className="text-sm opacity-70">
               Last updated: {loading ? "loading…" : updatedLabel}
             </span>
