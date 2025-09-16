@@ -1,4 +1,7 @@
 import { NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
+
+export const runtime = "nodejs";
 
 type DexPair = {
     chainId: string;
@@ -13,31 +16,51 @@ type DexPair = {
     priceChange?: { h24?: number; m5?: number; h1?: number };
 };
 
-export async function GET() {
+type DexMetrics = {
+    priceUsd: number | null;
+    liquidityUsd: number | null;
+    fdvUsd: number | null;
+    mcapUsd: number | null;
+    vol24: number | null;
+    ch24: number | null;
+    ch5m: number | null;
+    pairUrl: string | null;
+    dexId: string | null;
+};
+
+async function fetchDexMetrics(): Promise<{
+    configured: boolean;
+    metrics: DexMetrics | null;
+    error?: string;
+    statusCode?: number;
+}> {
     const token = process.env.NEXT_PUBLIC_TOKEN_CA;
 
     // Ikke sat endnu → svar pænt så UI kan vise placeholder
     if (!token || token === "REPLACE_WITH_REAL_SOLANA_MINT") {
-        return NextResponse.json({ ok: true, configured: false });
+        return { configured: false, metrics: null };
     }
 
     try {
         const res = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${token}`, {
-            // Next.js kan cache i et par sekunder for at skåne API’et
-            next: { revalidate: 15 },
-            // Dexscreener tillader CORS, men vi proxy’er alligevel
+            next: { revalidate: 15 }, // skån API’et en smule
             headers: { "User-Agent": "osrs-vault/1.0 (+nextjs)" },
         });
 
         if (!res.ok) {
-            return NextResponse.json({ ok: false, configured: true, error: `dexscreener ${res.status}` }, { status: 502 });
+            return {
+                configured: true,
+                metrics: null,
+                error: `dexscreener ${res.status}`,
+                statusCode: 502,
+            };
         }
 
         const json = await res.json();
         const pairs: DexPair[] = (json?.pairs ?? []).filter((p: DexPair) => p.chainId === "solana");
 
         if (pairs.length === 0) {
-            return NextResponse.json({ ok: true, configured: true, metrics: null, pairs: [] });
+            return { configured: true, metrics: null };
         }
 
         // Vælg den “bedste” pair = højest likviditet
@@ -50,16 +73,80 @@ export async function GET() {
         const vol24 = best.volume?.h24 ?? null;
         const ch24 = best.priceChange?.h24 ?? null;
         const ch5m = best.priceChange?.m5 ?? null;
-        const pairUrl = best.url ?? (best.pairAddress ? `https://dexscreener.com/${best.chainId}/${best.pairAddress}` : null);
+        const pairUrl =
+            best.url ?? (best.pairAddress ? `https://dexscreener.com/${best.chainId}/${best.pairAddress}` : null);
 
-        return NextResponse.json({
-            ok: true,
+        return {
             configured: true,
             metrics: { priceUsd, liquidityUsd, fdvUsd, mcapUsd, vol24, ch24, ch5m, pairUrl, dexId: best.dexId ?? null },
-            // valgfrit at sende pairs med tilbage (kan bruges til debug)
-            // pairs,
-        });
+        };
     } catch (e: any) {
-        return NextResponse.json({ ok: false, configured: true, error: e?.message ?? "unknown" }, { status: 500 });
+        return {
+            configured: true,
+            metrics: null,
+            error: e?.message ?? "unknown",
+            statusCode: 500,
+        };
     }
+}
+
+async function fetchItemsAcquired(): Promise<{ configured: boolean; itemsAcquired: number }> {
+    const url = process.env.SUPABASE_URL;
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const configured = Boolean(url && key);
+
+    if (!configured) {
+        // Supabase ikke konfigureret endnu → returnér 0
+        return { configured: false, itemsAcquired: 0 };
+    }
+
+    const sb = createClient(url!, key!, { auth: { persistSession: false } });
+
+    try {
+        const { data, error } = await sb
+            .from("counters")
+            .select("count")
+            .eq("key", "items_acquired")
+            .maybeSingle();
+
+        if (error) {
+            // Fall back til 0, men markér som konfigureret
+            return { configured: true, itemsAcquired: 0 };
+        }
+
+        return { configured: true, itemsAcquired: Number((data as any)?.count ?? 0) };
+    } catch {
+        return { configured: true, itemsAcquired: 0 };
+    }
+}
+
+export async function GET() {
+    const [dex, counter] = await Promise.all([fetchDexMetrics(), fetchItemsAcquired()]);
+
+    // Hvis Dex er konfigureret men fejlede, returnér samme semantik som før (502/500) — men med itemsAcquired med i body.
+    if (dex.configured && dex.error) {
+        return NextResponse.json(
+            {
+                ok: false,
+                configured: true,
+                configuredParts: { dex: dex.configured, supabase: counter.configured },
+                error: dex.error,
+                metrics: null,
+                itemsAcquired: counter.itemsAcquired,
+            },
+            { status: dex.statusCode ?? 500 }
+        );
+    }
+
+    // Success eller ikke konfigureret
+    return NextResponse.json(
+        {
+            ok: true,
+            configured: dex.configured, // for backwards compatibility (betyder “dex token sat”)
+            configuredParts: { dex: dex.configured, supabase: counter.configured },
+            metrics: dex.metrics,        // kan være null hvis ikke konfigureret
+            itemsAcquired: counter.itemsAcquired,
+        },
+        { headers: { "Cache-Control": "no-store" } }
+    );
 }

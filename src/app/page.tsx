@@ -2,12 +2,155 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 
 const ENTER_LINK = "/vault";
 const BUY_LINK = "https://dexscreener.com";
 
+/* ──────────────────────────────────────────────────────────────────────────────
+   Utils: formatters
+────────────────────────────────────────────────────────────────────────────── */
+function fmtInt(n: number | null | undefined) {
+    if (n == null || !Number.isFinite(n)) return "—";
+    return new Intl.NumberFormat("en-US").format(Math.floor(n));
+}
+function fmtGpShort(n: number | null | undefined) {
+    if (n == null || !Number.isFinite(n)) return "—";
+    const abs = Math.abs(n);
+    if (abs >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(2)}b GP`;
+    if (abs >= 1_000_000)     return `${(n / 1_000_000).toFixed(2)}m GP`;
+    if (abs >= 1_000)         return `${(n / 1_000).toFixed(1)}k GP`;
+    return `${Math.round(n)} GP`;
+}
+function fmtUsdShort(n: number | null | undefined) {
+    if (n == null || !Number.isFinite(n)) return "—";
+    const sign = n < 0 ? "-" : "";
+    const abs = Math.abs(n);
+    if (abs >= 1_000_000_000) return `${sign}$${(abs / 1_000_000_000).toFixed(2)}B`;
+    if (abs >= 1_000_000)     return `${sign}$${(abs / 1_000_000).toFixed(2)}M`;
+    if (abs >= 1_000)         return `${sign}$${(abs / 1_000).toFixed(1)}k`;
+    return `${sign}$${Math.round(abs)}`;
+}
+
+/* ──────────────────────────────────────────────────────────────────────────────
+   Hook: henter /api/state + /api/prices + /api/metrics og udregner metrics
+────────────────────────────────────────────────────────────────────────────── */
+type AdminState = { items?: { tbow?: number; scythe?: number; staff?: number }; updatedAt?: string | null };
+type PricesPayload = {
+    generatedAt: string;
+    source: "osrs-wiki";
+    items: Array<{ id: number; name: string; qty: number; priceGp: number; subtotalGp: number }>;
+    totalGp: number;
+};
+type MetricsPayload = {
+    ok: boolean;
+    configured: boolean;
+    configuredParts?: { dex?: boolean; supabase?: boolean };
+    metrics?: { mcapUsd?: number | null; vol24?: number | null } | null;
+    itemsAcquired?: number;
+};
+const ITEM_IDS = { tbow: 20997, scythe: 22486, staff: 27277 };
+
+function useVaultMetrics() {
+    const [counts, setCounts] = useState<{ tbow: number; scythe: number; staff: number }>({ tbow: 0, scythe: 0, staff: 0 });
+    const [priceMap, setPriceMap] = useState<Record<number, number>>({});
+    const [loading, setLoading] = useState(true);
+
+    // Optional env-based metrics (fallbacks)
+    const envDon = Number(process.env.NEXT_PUBLIC_STREAMER_DONATIONS_USD ?? "");
+    const envMcap = Number(process.env.NEXT_PUBLIC_MARKET_CAP_USD ?? "");
+    const envVol  = Number(process.env.NEXT_PUBLIC_VOLUME24H_USD ?? "");
+
+    // Live states (kan overrides af /api/metrics)
+    const [itemsAcquired, setItemsAcquired] = useState<number>(0);
+    const [marketCapUsd, setMarketCapUsd]   = useState<number | null>(Number.isFinite(envMcap) ? envMcap : null);
+    const [volume24hUsd, setVolume24hUsd]   = useState<number | null>(Number.isFinite(envVol)  ? envVol  : null);
+
+    useEffect(() => {
+        let alive = true;
+
+        const loadState = async () => {
+            try {
+                const res = await fetch(`/api/state?r=${Date.now()}`, { cache: "no-store" });
+                const json = (await res.json()) as AdminState;
+                if (!alive) return;
+                const i = json?.items ?? {};
+                setCounts({
+                    tbow:   Number(i.tbow)   || 0,
+                    scythe: Number(i.scythe) || 0,
+                    staff:  Number(i.staff)  || 0,
+                });
+            } catch {
+                if (alive) setCounts({ tbow: 0, scythe: 0, staff: 0 });
+            }
+        };
+
+        const loadPrices = async () => {
+            try {
+                const res = await fetch(`/api/prices?r=${Date.now()}`, { cache: "no-store" });
+                const json = (await res.json()) as PricesPayload;
+                if (!alive) return;
+                const m: Record<number, number> = {};
+                for (const it of json.items || []) m[it.id] = Number(it.priceGp) || 0;
+                setPriceMap(m);
+            } catch {
+                if (alive) setPriceMap({});
+            }
+        };
+
+        const loadMetrics = async () => {
+            try {
+                const res = await fetch(`/api/metrics?r=${Date.now()}`, { cache: "no-store" });
+                const json = (await res.json()) as MetricsPayload;
+                if (!alive) return;
+
+                if (typeof json.itemsAcquired === "number") {
+                    setItemsAcquired(json.itemsAcquired);
+                }
+
+                const mcap = json.metrics?.mcapUsd;
+                const vol  = json.metrics?.vol24;
+                if (typeof mcap === "number" && Number.isFinite(mcap)) setMarketCapUsd(mcap);
+                if (typeof vol  === "number" && Number.isFinite(vol))  setVolume24hUsd(vol);
+            } catch {
+                // behold eksisterende værdier/fallbacks
+            }
+        };
+
+        const refresh = async () => {
+            setLoading(true);
+            await Promise.all([loadState(), loadPrices(), loadMetrics()]);
+            if (alive) setLoading(false);
+        };
+
+        refresh();
+        const id = setInterval(refresh, 15_000);
+        const onVis = () => { if (!document.hidden) refresh(); };
+        document.addEventListener("visibilitychange", onVis);
+
+        return () => { alive = false; clearInterval(id); document.removeEventListener("visibilitychange", onVis); };
+    }, []);
+
+    const vaultValueGp = useMemo(() => {
+        const t   = counts.tbow   * (priceMap[ITEM_IDS.tbow]   || 0);
+        const s   = counts.scythe * (priceMap[ITEM_IDS.scythe] || 0);
+        const st  = counts.staff  * (priceMap[ITEM_IDS.staff]  || 0);
+        return t + s + st;
+    }, [counts, priceMap]);
+
+    return {
+        loading,
+        vaultValueGp,
+        itemsAcquired,
+        streamerDonationsUsd: Number.isFinite(envDon) ? envDon : null,
+        marketCapUsd,
+        volume24hUsd,
+    };
+}
+
 export default function LandingPage() {
+    const m = useVaultMetrics();
+
     return (
         <div className="min-h-screen w-full bg-black text-white overflow-hidden">
             {/* ── HERO ─────────────────────────────────────────────────────────────── */}
@@ -80,13 +223,28 @@ export default function LandingPage() {
                 {/* Metrics pinned at hero bottom (lifted a bit) */}
                 <div className="absolute left-1/2 bottom-[10vh] md:bottom-[9vh] -translate-x-1/2 w-full px-4 z-10">
                     <div className="mx-auto max-w-6xl">
-                        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                            {/* CHANGED LABELS ONLY */}
-                            <Metric label="Vault value" />
-                            <Metric label="Streamer donations" />
-                            <Metric label="Market cap" />
-                            <Metric label="24h volume" />
-                            <Metric label="Items acquired" />
+                        <div className="grid grid-cols-2 md:grid-cols-[minmax(180px,1fr)_minmax(240px,1.25fr)_repeat(3,minmax(180px,1fr))] gap-3">
+                            <Metric
+                                label="Vault value"
+                                value={fmtGpShort(m.vaultValueGp)}
+                                tooltip={m.vaultValueGp == null ? undefined : `${fmtInt(m.vaultValueGp)} GP`}
+                            />
+                            <Metric
+                                label="Streamer donations"
+                                value={fmtUsdShort(m.streamerDonationsUsd)}
+                            />
+                            <Metric
+                                label="Market cap"
+                                value={fmtUsdShort(m.marketCapUsd)}
+                            />
+                            <Metric
+                                label="24h volume"
+                                value={fmtUsdShort(m.volume24hUsd)}
+                            />
+                            <Metric
+                                label="Items acquired"
+                                value={fmtInt(m.itemsAcquired)}
+                            />
                         </div>
                     </div>
                 </div>
@@ -153,33 +311,30 @@ export default function LandingPage() {
                     <p className="mt-3 text-center text-[13px] text-[#d6d0c5]/90 max-w-3xl mx-auto">
                         We systematically sweep the market, buying every Mega-rare item we can find. As circulating supply shrink, a price shock is inevitable — sending these valuable items to new all-time highs.
                         <span className="block mt-2">
-    The items we sweep off the markets are extremely valuable and they are necessary to complete end game content efficiently.
-  </span>
+              The items we sweep off the markets are extremely valuable and they are necessary to complete end game content efficiently.
+            </span>
                     </p>
 
                     {/* CHANGED: only the 3 requested items */}
                     <div className="mt-8 grid grid-cols-1 md:grid-cols-3 lg:grid-cols-3 gap-8">
                         <DropItemCard
                             name="Twisted Bow"
-                            rarity="Ultra rare"
                             srcWebp="/drops/tbow.webp"
                             srcPng="/drops/tbow.png"
                         />
                         <DropItemCard
                             name="Scythe of Vitur"
-                            rarity="Very rare"
                             srcPng="/drops/scythe.png"
                         />
                         <DropItemCard
                             name="Tumeken's Shadow"
-                            rarity="Very rare"
                             srcPng="/drops/staff.png"
                         />
                     </div>
                 </div>
             </section>
 
-            {/* ── SOCIAL DOCK (X + Telegram; bottom-right) ─────────────────────────── */}
+            {/* ── SOCIAL DOCK (X + Telegram + Dexscreener; bottom-right) ──────────── */}
             <SocialDock />
 
             {/* Global keyframes */}
@@ -276,7 +431,6 @@ function Torch({ x, y, scale = 1 }: { x: string; y: string; scale?: number }) {
 }
 
 /* ── Helpers ───────────────────────────────────────────────────────────────── */
-
 function StoneButton({
                          children,
                          href,
@@ -337,11 +491,14 @@ function StoneButton({
     );
 }
 
-function Metric({ label }: { label: string }) {
+function Metric({ label, value, tooltip }: { label: string; value?: string; tooltip?: string }) {
     return (
-        <div className="bg-[#161616]/80 rounded-xl border border-[#2a2a2a] px-4 py-3 text-center backdrop-blur-[2px]">
-            <div className="text-[11px] uppercase tracking-[0.2em] text-[#c1b08a]">{label}</div>
-            <div className="text-xl font-semibold mt-1 text-[#f3efe5]">—</div>
+        <div
+            className="bg-[#161616]/80 rounded-xl border border-[#2a2a2a] px-4 py-3 text-center backdrop-blur-[2px]"
+            title={tooltip}
+        >
+            <div className="text-[11px] uppercase tracking-[0.2em] text-[#c1b08a] whitespace-nowrap">{label}</div>
+            <div className="text-xl font-semibold mt-1 text-[#f3efe5]">{value ?? "—"}</div>
         </div>
     );
 }
@@ -399,12 +556,10 @@ function StepCard({
 
 function DropItemCard({
                           name,
-                          rarity,
                           srcWebp,
                           srcPng,
                       }: {
     name: string;
-    rarity: string;
     srcWebp?: string;
     srcPng: string;
 }) {
@@ -424,16 +579,16 @@ function DropItemCard({
                 </picture>
             </div>
             <div className="mt-3 text-[15px] tracking-widest text-[#f4f1e8]">{name}</div>
-            <div className="mt-1 text-[11px] tracking-widest text-[#d4c27c]">{rarity}</div>
         </div>
     );
 }
 
-/* SOCIAL DOCK – X + Telegram; bottom-right; force icons white */
+/* SOCIAL DOCK – X + Telegram + Dexscreener; bottom-right; force icons white */
 function SocialDock() {
     const items = [
         { href: "https://twitter.com/", src: "/social/x.svg", label: "X" },
         { href: "https://t.me/", src: "/social/telegram.svg", label: "Telegram" },
+        { href: BUY_LINK, src: "/social/dexscreener.svg", label: "Dexscreener" },
     ];
     return (
         <div className="fixed bottom-3 right-3 md:bottom-6 md:right-6 z-[60]">

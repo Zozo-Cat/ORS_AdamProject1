@@ -1,6 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, Suspense } from "react";
+import BackToVaultButton from "@/components/BackToVaultButton";
+
+// TILLADT i client: gør siden dynamisk (ingen SSG)
+export const dynamic = "force-dynamic";
 
 /* ---------- types & defaults ---------- */
 type VaultState = {
@@ -19,11 +23,7 @@ function normalize(raw: any): VaultState {
     const i = r.items ?? {};
     const num = (v: any) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
     return {
-        items: {
-            tbow: num(i.tbow),
-            scythe: num(i.scythe),
-            staff: num(i.staff),
-        },
+        items: { tbow: num(i.tbow), scythe: num(i.scythe), staff: num(i.staff) },
         updatedAt: typeof r.updatedAt === "string" ? r.updatedAt : null,
     };
 }
@@ -31,7 +31,6 @@ function normalize(raw: any): VaultState {
 /* ===================================================================== */
 
 export default function AdminPage() {
-    // simpelt “login” – vi gemmer token lokalt og sender det i header til API’et
     const [token, setToken] = useState("");
     const [authed, setAuthed] = useState(false);
 
@@ -40,7 +39,6 @@ export default function AdminPage() {
     const [saving, setSaving] = useState(false);
     const [msg, setMsg] = useState<string | null>(null);
 
-    // Når vi er logget ind, hent nuværende state (GET er public i vores setup)
     useEffect(() => {
         if (!authed) return;
         let alive = true;
@@ -54,7 +52,7 @@ export default function AdminPage() {
                 } else {
                     if (alive) setMsg(`Failed to load state (HTTP ${res.status})`);
                 }
-            } catch (e) {
+            } catch {
                 if (alive) setMsg("Failed to load state.");
             } finally {
                 if (alive) setLoading(false);
@@ -83,7 +81,7 @@ export default function AdminPage() {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
-                    "x-admin-token": token, // API validerer dette imod ADMIN_TOKEN
+                    "x-admin-token": token,
                 },
                 body: JSON.stringify(state),
             });
@@ -91,21 +89,26 @@ export default function AdminPage() {
                 const t = await res.text().catch(() => "");
                 setMsg(`Save failed (HTTP ${res.status}) ${t ? "- " + t : ""}`);
             } else {
-                const json = await res.json().catch(() => null);
-                if (json) setState(normalize(json));
                 setMsg("Saved ✓");
             }
-        } catch (e) {
+        } catch {
             setMsg("Save failed.");
         } finally {
             setSaving(false);
         }
     }
 
-    // ---- Login view (meget simpelt) ----
+    // ---- Login view ----
     if (!authed) {
         return (
             <div className="min-h-screen bg-[#0e0c0a] text-white grid place-items-center px-4">
+                {/* Tilbage-knap øverst til venstre */}
+                <div className="fixed top-4 left-4 z-50">
+                    <Suspense fallback={null}>
+                        <BackToVaultButton />
+                    </Suspense>
+                </div>
+
                 <div className="w-full max-w-sm rounded-lg border border-[#2b2520] bg-[#14100e]/90 p-4 shadow-[0_0_0_1px_#000_inset]">
                     <h1 className="text-lg mb-3" style={{ textShadow: "0 1px 0 #000" }}>
                         Admin Login
@@ -126,7 +129,7 @@ export default function AdminPage() {
                     </button>
                     {msg && <p className="mt-2 text-sm opacity-80">{msg}</p>}
                     <p className="mt-3 text-xs opacity-60">
-                        The code will be controlled before acces is granted.
+                        The code will be controlled before access is granted.
                     </p>
                 </div>
             </div>
@@ -137,6 +140,10 @@ export default function AdminPage() {
     return (
         <div className="min-h-screen bg-[#0e0c0a] text-white px-4 py-6">
             <div className="mx-auto max-w-2xl space-y-4">
+                <Suspense fallback={null}>
+                    <BackToVaultButton />
+                </Suspense>
+
                 <h1 className="text-xl" style={{ textShadow: "0 1px 0 #000" }}>
                     Admin – OSRS Vault Items
                 </h1>
