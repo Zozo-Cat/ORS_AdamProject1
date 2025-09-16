@@ -1,3 +1,4 @@
+// src/app/vault/page.tsx
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -12,6 +13,10 @@ const DEX_URL = process.env.NEXT_PUBLIC_DEXSCREENER_URL || "https://dexscreener.
 type AdminItems = { tbow?: number; scythe?: number; staff?: number };
 type AdminState = { items: AdminItems; updatedAt?: string | null };
 const ICONS = { tbow: "/drops/tbow.png", scythe: "/drops/scythe.png", staff: "/drops/staff.png" } as const;
+
+// 1x1 transparent PNG til "spacer"-ikon (så højre slot fyldes, men intet vises)
+const TRANSPARENT_PNG =
+    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgYAAAAAMAASsJTYQAAAAASUVORK5CYII=";
 
 type PricesPayload = {
     generatedAt: string;
@@ -93,12 +98,19 @@ export default function VaultPage() {
         };
     }, []);
 
-    // Build items for panelet fra state
-    const items: BankItem[] = [];
+    // Build items (fast rækkefølge: tbow -> scythe -> staff)
     const counts = state?.items || {};
-    if ((counts.tbow ?? 0) > 0) items.push({ id: "tbow", icon: ICONS.tbow, qty: counts.tbow! });
-    if ((counts.scythe ?? 0) > 0) items.push({ id: "scythe", icon: ICONS.scythe, qty: counts.scythe! });
-    if ((counts.staff ?? 0) > 0) items.push({ id: "staff", icon: ICONS.staff, qty: counts.staff! });
+    const visible: BankItem[] = [];
+    if ((counts.tbow ?? 0) > 0)   visible.push({ id: "tbow",   icon: ICONS.tbow,   qty: counts.tbow! });
+    if ((counts.scythe ?? 0) > 0) visible.push({ id: "scythe", icon: ICONS.scythe, qty: counts.scythe! });
+    if ((counts.staff ?? 0) > 0)  visible.push({ id: "staff",  icon: ICONS.staff,  qty: counts.staff! });
+
+    // --- PACK-LEFT: hvis præcis 2 items, tilføj en usynlig "spacer" som #3 ---
+    // Hvis din BankPanel filtrerer "qty <= 0" væk, kan du ændre qty til Number.EPSILON.
+    const items: BankItem[] =
+        visible.length === 2
+            ? [...visible, { id: "_spacer", icon: TRANSPARENT_PNG, qty: 0 } as BankItem]
+            : visible;
 
     // Beregn titelværdi = (counts i UI) * (seneste wiki-pris)
     const vaultValue = useMemo(() => {

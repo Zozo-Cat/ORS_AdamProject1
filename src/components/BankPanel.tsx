@@ -1,3 +1,4 @@
+// src/components/BankPanel.tsx
 "use client";
 
 import { useMemo, useRef } from "react";
@@ -106,9 +107,12 @@ export default function BankPanel({
                         {items.map((it) => (
                             <div key={it.id} className="flex flex-col items-center text-[#F8E7A1]">
                                 <img src={it.icon} alt="" className="h-16 w-auto drop-shadow-[0_2px_0_#000]" />
-                                <div className="mt-2" style={{ textShadow: "0 2px 0 #000", fontSize: "22px" }}>
-                                    {formatOsrsNumber(it.qty, { abbrFrom: 100_000_000 })}
-                                </div>
+                                {/* ↓ Viser KUN tal, hvis qty > 0 og ikke spacer */}
+                                {it.id !== "_spacer" && Number.isFinite(it.qty) && it.qty > 0 && (
+                                    <div className="mt-2" style={{ textShadow: "0 2px 0 #000", fontSize: "22px" }}>
+                                        {formatOsrsNumber(it.qty, { abbrFrom: 100_000_000 })}
+                                    </div>
+                                )}
                             </div>
                         ))}
                     </div>

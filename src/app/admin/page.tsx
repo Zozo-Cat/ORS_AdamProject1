@@ -44,6 +44,7 @@ export default function AdminPage() {
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
     const [resetting, setResetting] = useState(false);
+    const [verifying, setVerifying] = useState(false);
     const [msg, setMsg] = useState<string | null>(null);
 
     // Når vi er logget ind, hent nuværende state (GET er public i vores setup)
@@ -131,6 +132,49 @@ export default function AdminPage() {
         }
     }
 
+    // —— Verificér login ved at POST'e nuværende state tilbage (no-op write) ——
+    async function verifyAndLogin() {
+        const code = token.trim();
+        if (!code) {
+            setMsg("Please enter the access code.");
+            return;
+        }
+        setVerifying(true);
+        setMsg(null);
+        try {
+            // 1) Hent aktuel state (public)
+            const getRes = await fetch("/api/state", { cache: "no-store" });
+            if (!getRes.ok) {
+                const t = await getRes.text().catch(() => "");
+                setMsg(`Login failed: cannot read state (HTTP ${getRes.status})${t ? " - " + t : ""}`);
+                return;
+            }
+            const current = await getRes.json();
+
+            // 2) POST samme state med token som auth-check (skal give 200 ved korrekt kode)
+            const postRes = await fetch("/api/state", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "x-admin-token": code,
+                },
+                body: JSON.stringify(current),
+            });
+
+            if (postRes.ok) {
+                setAuthed(true);
+                setMsg(null);
+            } else {
+                const t = await postRes.text().catch(() => "");
+                setMsg(`Access denied (HTTP ${postRes.status})${t ? " - " + t : ""}`);
+            }
+        } catch {
+            setMsg("Login failed.");
+        } finally {
+            setVerifying(false);
+        }
+    }
+
     /* ---- Login view ---- */
     if (!authed) {
         return (
@@ -142,8 +186,8 @@ export default function AdminPage() {
 
                 <form
                     onSubmit={(e) => {
-                        e.preventDefault();               // undgå page reload
-                        setAuthed(Boolean(token.trim())); // samme logik som før
+                        e.preventDefault(); // undgå page reload
+                        verifyAndLogin();
                     }}
                     className="w-full max-w-sm rounded-lg border border-[#2b2520] bg-[#14100e]/90 p-4 shadow-[0_0_0_1px_#000_inset]"
                 >
@@ -157,15 +201,17 @@ export default function AdminPage() {
                         value={token}
                         onChange={(e) => setToken(e.target.value)}
                         autoFocus
-                        className="w-full rounded-md border border-[#3a2f25] bg-[#0f0c0a] px-3 py-2 outline-none focus:border-[#5a4635]"
+                        disabled={verifying}
+                        className="w-full rounded-md border border-[#3a2f25] bg-[#0f0c0a] px-3 py-2 outline-none focus:border-[#5a4635] disabled:opacity-60"
                     />
 
                     <button
                         type="submit"
-                        className="mt-3 w-full rounded-md border border-[#3a2f25] bg-[#2b1f1a] px-3 py-2 text-[#F8E7A1] hover:bg-[#3a2a20] transition-colors"
+                        disabled={verifying}
+                        className="mt-3 w-full rounded-md border border-[#3a2f25] bg-[#2b1f1a] px-3 py-2 text-[#F8E7A1] hover:bg-[#3a2a20] transition-colors disabled:opacity-50"
                         style={{ textShadow: "0 1px 0 #000" }}
                     >
-                        Enter
+                        {verifying ? "Checking…" : "Enter"}
                     </button>
 
                     {msg && <p className="mt-2 text-sm opacity-80">{msg}</p>}
