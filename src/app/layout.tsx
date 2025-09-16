@@ -10,7 +10,7 @@ const pixel = Press_Start_2P({
 
 export const metadata: Metadata = {
     title: "OSRS Vault",
-    description: "RuneScape-style vault + metrics for $OSRS",
+    description: "Officail page for $OSRS Vault",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

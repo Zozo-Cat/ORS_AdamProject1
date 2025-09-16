@@ -1,3 +1,4 @@
+// src/app/admin/page.tsx
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -130,7 +131,7 @@ export default function AdminPage() {
         }
     }
 
-    // ---- Login view ----
+    /* ---- Login view ---- */
     if (!authed) {
         return (
             <div className="min-h-screen bg-[#0e0c0a] text-white grid place-items-center px-4">
@@ -139,34 +140,44 @@ export default function AdminPage() {
                     <BackToVaultButton />
                 </div>
 
-                <div className="w-full max-w-sm rounded-lg border border-[#2b2520] bg-[#14100e]/90 p-4 shadow-[0_0_0_1px_#000_inset]">
+                <form
+                    onSubmit={(e) => {
+                        e.preventDefault();               // undgå page reload
+                        setAuthed(Boolean(token.trim())); // samme logik som før
+                    }}
+                    className="w-full max-w-sm rounded-lg border border-[#2b2520] bg-[#14100e]/90 p-4 shadow-[0_0_0_1px_#000_inset]"
+                >
                     <h1 className="text-lg mb-3" style={{ textShadow: "0 1px 0 #000" }}>
                         Admin Login
                     </h1>
+
                     <label className="block text-sm mb-1 opacity-80">Access code</label>
                     <input
                         type="password"
                         value={token}
                         onChange={(e) => setToken(e.target.value)}
+                        autoFocus
                         className="w-full rounded-md border border-[#3a2f25] bg-[#0f0c0a] px-3 py-2 outline-none focus:border-[#5a4635]"
                     />
+
                     <button
-                        onClick={() => setAuthed(Boolean(token.trim()))}
+                        type="submit"
                         className="mt-3 w-full rounded-md border border-[#3a2f25] bg-[#2b1f1a] px-3 py-2 text-[#F8E7A1] hover:bg-[#3a2a20] transition-colors"
                         style={{ textShadow: "0 1px 0 #000" }}
                     >
                         Enter
                     </button>
+
                     {msg && <p className="mt-2 text-sm opacity-80">{msg}</p>}
                     <p className="mt-3 text-xs opacity-60">
                         The code will be controlled before access is granted.
                     </p>
-                </div>
+                </form>
             </div>
         );
     }
 
-    // ---- Editor view ----
+    /* ---- Editor view ---- */
     return (
         <div className="min-h-screen bg-[#0e0c0a] text-white px-4 py-6">
             <div className="mx-auto max-w-2xl space-y-4">
