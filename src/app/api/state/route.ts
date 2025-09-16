@@ -1,3 +1,4 @@
+// src/app/api/state/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import crypto from "crypto";
@@ -10,170 +11,162 @@ const sb = createClient(
     { auth: { persistSession: false } }
 );
 
-type Counts = { tbow: number; scythe: number; staff: number };
-type VaultState = { items: Counts; updatedAt: string | null };
+type VaultState = {
+    items: { tbow: number; scythe: number; staff: number };
+    updatedAt: string | null;
+};
 
-const ZERO: Counts = { tbow: 0, scythe: 0, staff: 0 };
+const DEFAULT_STATE: VaultState = {
+    items: { tbow: 0, scythe: 0, staff: 0 },
+    updatedAt: null,
+};
+
 const ITEM_IDS = { tbow: 20997, scythe: 22486, staff: 27277 };
 
-function toInt(v: any) {
-    const n = Number(v);
-    return Number.isFinite(n) && n >= 0 ? Math.floor(n) : 0;
-}
-function normCounts(raw: any): Counts {
-    const i = raw ?? {};
-    return { tbow: toInt(i.tbow), scythe: toInt(i.scythe), staff: toInt(i.staff) };
-}
-
-async function ensureAccountId(): Promise<number> {
-    const hash = (process.env.ADMIN_ACCOUNT_HASH ?? "demo-hash").trim();
-    const label = (process.env.ADMIN_ACCOUNT_LABEL ?? "Vault").trim();
-
-    let { data: acc, error } = await sb
-        .from("accounts")
-        .select("id")
-        .eq("account_hash", hash)
-        .maybeSingle();
-
-    if (acc?.id) return acc.id;
-
-    const { data: ins, error: insErr } = await sb
-        .from("accounts")
-        .insert({ account_hash: hash, label })
-        .select("id")
-        .single();
-
-    if (ins?.id) return ins.id;
-
-    const { data: acc2 } = await sb
-        .from("accounts")
-        .select("id")
-        .eq("account_hash", hash)
-        .order("id", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-    if (acc2?.id) return acc2.id;
-
-    throw new Error(insErr?.message || error?.message || "Failed to ensure account");
+function normalize(raw: any): VaultState {
+    const r = raw ?? {};
+    const i = r.items ?? {};
+    const num = (v: any) =>
+        typeof v === "number" && Number.isFinite(v) && v >= 0 ? Math.floor(v) : 0;
+    return {
+        items: { tbow: num(i.tbow), scythe: num(i.scythe), staff: num(i.staff) },
+        updatedAt: typeof r.updatedAt === "string" ? r.updatedAt : null,
+    };
 }
 
-/** GET: return latest approved state (or zeros) */
+/** GET – læs seneste approved snapshot via RPC-funktionen */
 export async function GET() {
     try {
-        const { data, error } = await sb
-            .from("snapshots")
-            .select("raw_json")
-            .eq("approved", true)
-            .order("id", { ascending: false })
-            .limit(1)
-            .maybeSingle();
+        const { data, error } = await sb.rpc("latest_approved_snapshot_totals");
         if (error) throw error;
 
-        const raw = (data as any)?.raw_json ?? {};
-        const items = normCounts(raw.items);
-        const updatedAt = typeof raw.updatedAt === "string" ? raw.updatedAt : null;
+        const r: any =
+            Array.isArray(data) && data.length ? data[0] : (data as any) ?? null;
+        if (!r) {
+            return NextResponse.json(DEFAULT_STATE, {
+                headers: { "Cache-Control": "no-store" },
+            });
+        }
 
-        return NextResponse.json(
-            { items, updatedAt } as VaultState,
-            { headers: { "Cache-Control": "no-store" } }
-        );
-    } catch {
-        return NextResponse.json(
-            { items: ZERO, updatedAt: null } as VaultState,
-            { headers: { "Cache-Control": "no-store" } }
-        );
+        const state: VaultState = {
+            items: {
+                tbow: Number(r.tbow) || 0,
+                scythe: Number(r.scythe) || 0,
+                staff: Number(r.staff) || 0,
+            },
+            updatedAt: r.updated_at ? new Date(r.updated_at).toISOString() : null,
+        };
+
+        return NextResponse.json(state, {
+            headers: { "Cache-Control": "no-store" },
+        });
+    } catch (err) {
+        console.error("GET /api/state RPC failed:", err);
+        return NextResponse.json(DEFAULT_STATE, {
+            headers: { "Cache-Control": "no-store" },
+        });
     }
 }
 
-/** POST: save state (admin) + increment cumulative items_acquired on positive deltas */
+/** POST – gem ny state som snapshot (+ snapshot_items) */
 export async function POST(req: NextRequest) {
-    // auth
-    const authHeader = req.headers.get("authorization") ?? "";
-    const xHeader = req.headers.get("x-admin-token") ?? "";
-    let provided = "";
-    if (authHeader.toLowerCase().startsWith("bearer ")) provided = authHeader.slice(7).trim();
-    else if (xHeader) provided = xHeader.trim();
-
-    const expected = (process.env.ADMIN_TOKEN ?? "").trim();
-    if (!expected) return NextResponse.json({ error: "Admin token not configured" }, { status: 500 });
-    if (provided !== expected) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-    // body
-    let body: any;
     try {
-        body = await req.json();
-    } catch {
-        return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
-    }
+        // auth
+        const authHeader = req.headers.get("authorization") ?? "";
+        const xHeader = req.headers.get("x-admin-token") ?? "";
+        let provided = "";
+        if (authHeader.toLowerCase().startsWith("bearer ")) {
+            provided = authHeader.slice(7).trim();
+        } else if (xHeader) {
+            provided = xHeader.trim();
+        }
 
-    const newCounts = normCounts(body?.items ?? body);
-    const payload: VaultState = { items: newCounts, updatedAt: new Date().toISOString() };
+        const expected = (process.env.ADMIN_TOKEN ?? "").trim();
+        if (!expected) {
+            return NextResponse.json(
+                { error: "Admin token not configured" },
+                { status: 500 }
+            );
+        }
+        if (provided !== expected) {
+            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        }
 
-    try {
-        // sidste approved til delta
-        const { data: last } = await sb
-            .from("snapshots")
-            .select("raw_json")
-            .eq("approved", true)
-            .order("id", { ascending: false })
-            .limit(1)
-            .maybeSingle();
+        // payload
+        let body: any;
+        try {
+            body = await req.json();
+        } catch {
+            return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+        }
 
-        const prevCounts = normCounts((last as any)?.raw_json?.items);
+        const merged = normalize({ items: (body?.items ?? body) as any });
+        const payload: VaultState = {
+            items: merged.items,
+            updatedAt: new Date().toISOString(),
+        };
 
-        const inc =
-            Math.max(0, newCounts.tbow - prevCounts.tbow) +
-            Math.max(0, newCounts.scythe - prevCounts.scythe) +
-            Math.max(0, newCounts.staff - prevCounts.staff);
-
-        // konto-id (NOT NULL fix)
-        const accountId = await ensureAccountId();
-
-        // hash af payload (NOT NULL fix for payload_hash)
+        const nowSec = Math.floor(Date.now() / 1000);
+        const nonce = crypto.randomUUID();
         const payloadJson = JSON.stringify(payload);
-        const payloadHash = crypto.createHash("sha256").update(payloadJson).digest("hex");
+        const payloadHash = crypto
+            .createHash("sha256")
+            .update(payloadJson)
+            .digest("hex");
 
-        // skriv snapshot
+        // find account
+        const accountHash = (process.env.ADMIN_ACCOUNT_HASH ?? "demo-hash").trim();
+        const { data: acc, error: accErr } = await sb
+            .from("accounts")
+            .select("id")
+            .eq("account_hash", accountHash)
+            .single();
+
+        if (accErr || !acc) {
+            return NextResponse.json(
+                { error: `No account with account_hash=${accountHash}` },
+                { status: 500 }
+            );
+        }
+
+        const autoApprove =
+            String(process.env.AUTO_APPROVE_SNAPSHOTS ?? "true").toLowerCase() ===
+            "true";
+
+        // insert snapshot
         const { data: snap, error: snapErr } = await sb
             .from("snapshots")
             .insert({
-                account_id: accountId,
-                ts_unix: Math.floor(Date.now() / 1000),
-                nonce: crypto.randomUUID(),
+                account_id: acc.id,
+                ts_unix: nowSec,
+                nonce,
                 payload_hash: payloadHash,
-                raw_json: payload,
-                approved: true,
+                raw_json: payload, // hele payload
+                approved: autoApprove,
             })
             .select("id")
             .single();
-        if (snapErr || !snap) throw new Error(snapErr?.message ?? "snapshot insert failed");
 
-        // snapshot_items (tre rækker)
-        const itemRows = [
-            { snapshot_id: snap.id, item_id: ITEM_IDS.tbow,   qty: newCounts.tbow },
-            { snapshot_id: snap.id, item_id: ITEM_IDS.scythe, qty: newCounts.scythe },
-            { snapshot_id: snap.id, item_id: ITEM_IDS.staff,  qty: newCounts.staff },
+        if (snapErr || !snap) {
+            return NextResponse.json(
+                { error: snapErr?.message ?? "snapshot insert failed" },
+                { status: 500 }
+            );
+        }
+
+        // insert tre rækker i snapshot_items
+        const rows = [
+            { snapshot_id: snap.id, item_id: ITEM_IDS.tbow, qty: payload.items.tbow },
+            {
+                snapshot_id: snap.id,
+                item_id: ITEM_IDS.scythe,
+                qty: payload.items.scythe,
+            },
+            { snapshot_id: snap.id, item_id: ITEM_IDS.staff, qty: payload.items.staff },
         ];
-        const { error: itemsErr } = await sb.from("snapshot_items").insert(itemRows);
-        if (itemsErr) throw new Error(itemsErr.message);
-
-        // opdater kumulativ counter
-        if (inc > 0) {
-            const { data: ctr } = await sb
-                .from("counters")
-                .select("count")
-                .eq("key", "items_acquired")
-                .maybeSingle();
-
-            if (ctr) {
-                await sb
-                    .from("counters")
-                    .update({ count: Number(ctr.count || 0) + inc, updated_at: new Date().toISOString() })
-                    .eq("key", "items_acquired");
-            } else {
-                await sb.from("counters").insert({ key: "items_acquired", count: inc });
-            }
+        const { error: itemsErr } = await sb.from("snapshot_items").insert(rows);
+        if (itemsErr) {
+            return NextResponse.json({ error: itemsErr.message }, { status: 500 });
         }
 
         return NextResponse.json(
@@ -181,6 +174,7 @@ export async function POST(req: NextRequest) {
             { headers: { "Cache-Control": "no-store" } }
         );
     } catch (err: any) {
-        return NextResponse.json({ error: err?.message ?? "Failed to save" }, { status: 500 });
+        console.error("POST /api/state error:", err?.message || err);
+        return NextResponse.json({ error: "Failed to save" }, { status: 500 });
     }
 }
