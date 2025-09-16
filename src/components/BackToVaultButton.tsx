@@ -1,16 +1,16 @@
-'use client';
-import { useRouter, useSearchParams } from 'next/navigation';
+// no "use client" needed here (no hooks)
+import Link from "next/link";
 
-export default function BackToVaultButton({ fallback = '/vault' }: { fallback?: string }) {
-    const router = useRouter();
-    const sp = useSearchParams();
-    const from = sp.get('from') || fallback;
+export default function BackToVaultButton() {
     return (
-        <button
-            onClick={() => router.push(from)}
-            className="px-3 py-2 rounded-xl border text-sm hover:bg-neutral-100 text-black bg-white"
+        <Link
+            href="/vault"
+            className="inline-flex items-center gap-2 rounded-md border border-[#3a2f25] bg-[#1b1a1a] px-3 py-1.5 text-sm text-[#f1e7c6] shadow-[0_0_0_1px_#000_inset] hover:bg-[#2b1f1a] transition-colors"
+            style={{ textShadow: "0 1px 0 #000" }}
+            aria-label="Back to Vault"
+            title="Back to Vault"
         >
-            ← Back to Vault
-        </button>
+            ← Back
+        </Link>
     );
 }

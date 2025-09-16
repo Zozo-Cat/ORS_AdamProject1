@@ -3,6 +3,9 @@
 import { useEffect, useMemo, useState } from "react";
 import BackToVaultButton from "@/components/BackToVaultButton";
 
+// Make sure this page is not statically rendered
+export const dynamic = "force-dynamic";
+
 /* ---------- types & defaults ---------- */
 type VaultState = {
     items: { tbow: number; scythe: number; staff: number }; // Tumeken's Shadow == staff
@@ -39,6 +42,7 @@ export default function AdminPage() {
     const [state, setState] = useState<VaultState>(DEFAULT_STATE);
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
+    const [resetting, setResetting] = useState(false);
     const [msg, setMsg] = useState<string | null>(null);
 
     // Når vi er logget ind, hent nuværende state (GET er public i vores setup)
@@ -55,7 +59,7 @@ export default function AdminPage() {
                 } else {
                     if (alive) setMsg(`Failed to load state (HTTP ${res.status})`);
                 }
-            } catch (e) {
+            } catch {
                 if (alive) setMsg("Failed to load state.");
             } finally {
                 if (alive) setLoading(false);
@@ -90,20 +94,18 @@ export default function AdminPage() {
             });
             if (!res.ok) {
                 const t = await res.text().catch(() => "");
-                setMsg(`Save failed (HTTP ${res.status}) ${t ? "- " + t : ""}`);
+                setMsg(`Save failed (HTTP ${res.status})${t ? " - " + t : ""}`);
             } else {
-                // Behold lokal state; server svarer kun { ok: true, snapshotId }
                 setMsg("Saved ✓");
             }
-        } catch (e) {
+        } catch {
             setMsg("Save failed.");
         } finally {
             setSaving(false);
         }
     }
 
-    // --- NYT: reset items acquired (kun landing-page-metric) ---
-    const [resetting, setResetting] = useState(false);
+    // —— Reset “Items Acquired” tælleren (landing page metric) ——
     async function resetItemsAcquired() {
         setResetting(true);
         setMsg(null);
@@ -111,16 +113,17 @@ export default function AdminPage() {
             const res = await fetch("/api/metrics/reset", {
                 method: "POST",
                 headers: {
-                    "x-admin-token": token, // samme token som Save
+                    "Content-Type": "application/json",
+                    "x-admin-token": token, // samme access code som til Save
                 },
             });
             if (!res.ok) {
                 const t = await res.text().catch(() => "");
-                setMsg(`Reset failed (HTTP ${res.status}) ${t ? "- " + t : ""}`);
+                setMsg(`Reset failed (HTTP ${res.status})${t ? " - " + t : ""}`);
             } else {
                 setMsg("Items acquired reset ✓");
             }
-        } catch (e) {
+        } catch {
             setMsg("Reset failed.");
         } finally {
             setResetting(false);
@@ -179,21 +182,27 @@ export default function AdminPage() {
                         <ItemField
                             label="Twisted Bow"
                             value={state.items.tbow}
-                            onChange={(v) => setState((s) => ({ ...s, items: { ...s.items, tbow: v } }))}
+                            onChange={(v) =>
+                                setState((s) => ({ ...s, items: { ...s.items, tbow: v } }))
+                            }
                         />
                         <ItemField
                             label="Scythe of Vitur"
                             value={state.items.scythe}
-                            onChange={(v) => setState((s) => ({ ...s, items: { ...s.items, scythe: v } }))}
+                            onChange={(v) =>
+                                setState((s) => ({ ...s, items: { ...s.items, scythe: v } }))
+                            }
                         />
                         <ItemField
                             label="Tumeken's Shadow"
                             value={state.items.staff}
-                            onChange={(v) => setState((s) => ({ ...s, items: { ...s.items, staff: v } }))}
+                            onChange={(v) =>
+                                setState((s) => ({ ...s, items: { ...s.items, staff: v } }))
+                            }
                         />
                     </div>
 
-                    <div className="mt-4 flex flex-wrap items-center gap-3">
+                    <div className="mt-4 flex items-center gap-3">
                         <button
                             onClick={save}
                             disabled={saving}
@@ -203,20 +212,22 @@ export default function AdminPage() {
                             {saving ? "Saving…" : "Save"}
                         </button>
 
-                        {/* NY KNAP: reset items acquired (landing-page metric) */}
-                        <button
-                            onClick={resetItemsAcquired}
-                            disabled={resetting}
-                            className="rounded-md border border-[#3a2f25] bg-[#1a2b25] px-4 py-2 text-[#cfead8] hover:bg-[#20362e] transition-colors disabled:opacity-50"
-                            style={{ textShadow: "0 1px 0 #000" }}
-                            title="Reset only affects the Items Acquired metric on the landing page"
-                        >
-                            {resetting ? "Resetting…" : "Reset items acquired"}
-                        </button>
-
                         <span className="text-sm opacity-70">
               Last updated: {loading ? "loading…" : updatedLabel}
             </span>
+                    </div>
+
+                    {/* Reset sektion – kun Items Acquired tælleren */}
+                    <div className="mt-6 pt-4 border-t border-[#2b2520]">
+                        <div className="text-sm opacity-80 mb-2">Items acquired counter</div>
+                        <button
+                            onClick={resetItemsAcquired}
+                            disabled={resetting}
+                            className="rounded-md border border-[#3a2f25] bg-[#1d2014] px-3 py-2 text-[#E6F4A1] hover:bg-[#262a1b] transition-colors disabled:opacity-50"
+                            style={{ textShadow: "0 1px 0 #000" }}
+                        >
+                            {resetting ? "Resetting…" : "Reset Items Acquired"}
+                        </button>
                     </div>
 
                     {msg && <p className="mt-3 text-sm opacity-80">{msg}</p>}
