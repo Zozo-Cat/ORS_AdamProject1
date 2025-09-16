@@ -586,8 +586,8 @@ function DropItemCard({
 /* SOCIAL DOCK – X + Telegram + Dexscreener; bottom-right; force icons white */
 function SocialDock() {
     const items = [
-        { href: "https://twitter.com/", src: "/social/x.svg", label: "X" },
-        { href: "https://t.me/", src: "/social/telegram.svg", label: "Telegram" },
+        { href: "https://x.com/OSRSvault", src: "/social/x.svg", label: "X" },
+        { href: "https://pump.fun/board", src: "/social/pumpfun.svg", label: "Pumpfun" },
         { href: BUY_LINK, src: "/social/dexscreener.svg", label: "Dexscreener" },
     ];
     return (

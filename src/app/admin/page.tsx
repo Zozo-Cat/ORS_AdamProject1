@@ -1,10 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState, Suspense } from "react";
+import { useEffect, useMemo, useState } from "react";
 import BackToVaultButton from "@/components/BackToVaultButton";
-
-// TILLADT i client: gør siden dynamisk (ingen SSG)
-export const dynamic = "force-dynamic";
 
 /* ---------- types & defaults ---------- */
 type VaultState = {
@@ -23,7 +20,11 @@ function normalize(raw: any): VaultState {
     const i = r.items ?? {};
     const num = (v: any) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
     return {
-        items: { tbow: num(i.tbow), scythe: num(i.scythe), staff: num(i.staff) },
+        items: {
+            tbow: num(i.tbow),
+            scythe: num(i.scythe),
+            staff: num(i.staff),
+        },
         updatedAt: typeof r.updatedAt === "string" ? r.updatedAt : null,
     };
 }
@@ -31,6 +32,7 @@ function normalize(raw: any): VaultState {
 /* ===================================================================== */
 
 export default function AdminPage() {
+    // simpelt “login” – vi gemmer token lokalt og sender det i header til API’et
     const [token, setToken] = useState("");
     const [authed, setAuthed] = useState(false);
 
@@ -39,6 +41,7 @@ export default function AdminPage() {
     const [saving, setSaving] = useState(false);
     const [msg, setMsg] = useState<string | null>(null);
 
+    // Når vi er logget ind, hent nuværende state (GET er public i vores setup)
     useEffect(() => {
         if (!authed) return;
         let alive = true;
@@ -52,7 +55,7 @@ export default function AdminPage() {
                 } else {
                     if (alive) setMsg(`Failed to load state (HTTP ${res.status})`);
                 }
-            } catch {
+            } catch (e) {
                 if (alive) setMsg("Failed to load state.");
             } finally {
                 if (alive) setLoading(false);
@@ -81,7 +84,7 @@ export default function AdminPage() {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
-                    "x-admin-token": token,
+                    "x-admin-token": token, // API validerer dette imod ADMIN_TOKEN
                 },
                 body: JSON.stringify(state),
             });
@@ -89,12 +92,38 @@ export default function AdminPage() {
                 const t = await res.text().catch(() => "");
                 setMsg(`Save failed (HTTP ${res.status}) ${t ? "- " + t : ""}`);
             } else {
+                // Behold lokal state; server svarer kun { ok: true, snapshotId }
                 setMsg("Saved ✓");
             }
-        } catch {
+        } catch (e) {
             setMsg("Save failed.");
         } finally {
             setSaving(false);
+        }
+    }
+
+    // --- NYT: reset items acquired (kun landing-page-metric) ---
+    const [resetting, setResetting] = useState(false);
+    async function resetItemsAcquired() {
+        setResetting(true);
+        setMsg(null);
+        try {
+            const res = await fetch("/api/metrics/reset", {
+                method: "POST",
+                headers: {
+                    "x-admin-token": token, // samme token som Save
+                },
+            });
+            if (!res.ok) {
+                const t = await res.text().catch(() => "");
+                setMsg(`Reset failed (HTTP ${res.status}) ${t ? "- " + t : ""}`);
+            } else {
+                setMsg("Items acquired reset ✓");
+            }
+        } catch (e) {
+            setMsg("Reset failed.");
+        } finally {
+            setResetting(false);
         }
     }
 
@@ -104,9 +133,7 @@ export default function AdminPage() {
             <div className="min-h-screen bg-[#0e0c0a] text-white grid place-items-center px-4">
                 {/* Tilbage-knap øverst til venstre */}
                 <div className="fixed top-4 left-4 z-50">
-                    <Suspense fallback={null}>
-                        <BackToVaultButton />
-                    </Suspense>
+                    <BackToVaultButton />
                 </div>
 
                 <div className="w-full max-w-sm rounded-lg border border-[#2b2520] bg-[#14100e]/90 p-4 shadow-[0_0_0_1px_#000_inset]">
@@ -140,9 +167,8 @@ export default function AdminPage() {
     return (
         <div className="min-h-screen bg-[#0e0c0a] text-white px-4 py-6">
             <div className="mx-auto max-w-2xl space-y-4">
-                <Suspense fallback={null}>
-                    <BackToVaultButton />
-                </Suspense>
+                {/* Tilbage-knap øverst */}
+                <BackToVaultButton />
 
                 <h1 className="text-xl" style={{ textShadow: "0 1px 0 #000" }}>
                     Admin – OSRS Vault Items
@@ -153,27 +179,21 @@ export default function AdminPage() {
                         <ItemField
                             label="Twisted Bow"
                             value={state.items.tbow}
-                            onChange={(v) =>
-                                setState((s) => ({ ...s, items: { ...s.items, tbow: v } }))
-                            }
+                            onChange={(v) => setState((s) => ({ ...s, items: { ...s.items, tbow: v } }))}
                         />
                         <ItemField
                             label="Scythe of Vitur"
                             value={state.items.scythe}
-                            onChange={(v) =>
-                                setState((s) => ({ ...s, items: { ...s.items, scythe: v } }))
-                            }
+                            onChange={(v) => setState((s) => ({ ...s, items: { ...s.items, scythe: v } }))}
                         />
                         <ItemField
                             label="Tumeken's Shadow"
                             value={state.items.staff}
-                            onChange={(v) =>
-                                setState((s) => ({ ...s, items: { ...s.items, staff: v } }))
-                            }
+                            onChange={(v) => setState((s) => ({ ...s, items: { ...s.items, staff: v } }))}
                         />
                     </div>
 
-                    <div className="mt-4 flex items-center gap-3">
+                    <div className="mt-4 flex flex-wrap items-center gap-3">
                         <button
                             onClick={save}
                             disabled={saving}
@@ -182,6 +202,18 @@ export default function AdminPage() {
                         >
                             {saving ? "Saving…" : "Save"}
                         </button>
+
+                        {/* NY KNAP: reset items acquired (landing-page metric) */}
+                        <button
+                            onClick={resetItemsAcquired}
+                            disabled={resetting}
+                            className="rounded-md border border-[#3a2f25] bg-[#1a2b25] px-4 py-2 text-[#cfead8] hover:bg-[#20362e] transition-colors disabled:opacity-50"
+                            style={{ textShadow: "0 1px 0 #000" }}
+                            title="Reset only affects the Items Acquired metric on the landing page"
+                        >
+                            {resetting ? "Resetting…" : "Reset items acquired"}
+                        </button>
+
                         <span className="text-sm opacity-70">
               Last updated: {loading ? "loading…" : updatedLabel}
             </span>

@@ -4,8 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import BankPanel, { type BankItem } from "@/components/BankPanel";
 
-const X_URL  = process.env.NEXT_PUBLIC_X_URL  || "https://x.com/";
-const TG_URL = process.env.NEXT_PUBLIC_TELEGRAM_URL || "https://t.me/";
+const X_URL  = process.env.NEXT_PUBLIC_X_URL  || "https://x.com/OSRSvault";
+const pump_URL = process.env.NEXT_PUBLIC_TELEGRAM_URL || "https://pump.fun/board";
 const BUY_URL = process.env.NEXT_PUBLIC_BUY_URL || "/#buy";
 const DEX_URL = process.env.NEXT_PUBLIC_DEXSCREENER_URL || "https://dexscreener.com/";
 
@@ -147,7 +147,7 @@ export default function VaultPage() {
                 <section className="mt-2 flex items-center justify-between gap-4 rounded-lg border border-[#2b2520] bg-[#0f0c0a]/90 px-4 py-3 shadow-[0_0_0_1px_#000_inset]">
                     <div className="flex items-center gap-3">
                         <SocialIcon href={X_URL}  src="/social/x.svg" alt="X" />
-                        <SocialIcon href={TG_URL} src="/social/telegram.svg" alt="Telegram" />
+                        <SocialIcon href={pump_URL} src="/social/pumpfun.svg" alt="Pumpfun" />
                         {/* Dexscreener (sort ikon) */}
                         <SocialIcon href={DEX_URL} src="/social/dexscreener.svg" alt="Dexscreener" />
                     </div>
